@@ -906,6 +906,9 @@ body{font-family:'Segoe UI',sans-serif;background:var(--bg);color:var(--text);mi
 <div class="ov" id="ov-hist">
 <div class="modal" style="width:740px;">
   <h3 id="hist-maq-title">Histórico <button class="mc" onclick="cm('ov-hist')">✕</button></h3>
+  <div style="margin-bottom:12px;">
+    <button class="btn btn-p" onclick="exportHistMaqExcel()" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:8px 14px;">📊 Exportar Excel desta máquina</button>
+  </div>
   <div style="overflow-x:auto;"><table class="htable">
     <thead><tr><th>Data</th><th>Tipo</th><th>Descrição</th><th>Causa</th><th>Ação</th><th>Técnico</th><th>Dur.</th><th style="text-align:center">Ações</th></tr></thead>
     <tbody id="hist-maq-body"></tbody>
@@ -3166,7 +3169,44 @@ async function exportHistExcel(){
   }catch(e){hideLoading();alert('Erro ao gerar Excel: '+e.message);console.error(e);}
 }
 
-// ─── USUÁRIOS ───
+// ─── EXPORTAR EXCEL DA MÁQUINA ───
+async function exportHistMaqExcel(){
+  const id=window._histMaqId;
+  if(!id){alert('Nenhuma máquina selecionada.');return;}
+  showLoading('Gerando Excel...');
+  try{
+    const [allHist, maqs] = await Promise.all([gHist(), gMaqs()]);
+    const m=maqs.find(x=>x.id===id)||{nome:'Máquina'};
+    const hist=allHist.filter(h=>h.maqId===id);
+    if(!hist.length){hideLoading();alert('Nenhum registro para exportar.');return;}
+
+    const statusMap={ok:'Resolvido',corr:'Em Manutenção',pm:'PM Realizada',aten:'Atenção'};
+    const rows=hist.map(h=>({
+      'Máquina':m.nome,
+      'Tipo':h.tipo||'—',
+      'Data':h.dt||'',
+      'Início':h.dtIni?h.dtIni.replace('T',' ').slice(0,16):'—',
+      'Fim':h.dtFim?h.dtFim.replace('T',' ').slice(0,16):(h.finalizado?'—':'Em andamento'),
+      'Duração (h)':h.h||0,
+      'Descrição / Problema':h.desc||'',
+      'Causa':h.causa||'',
+      'Ação Tomada':h.acao||'',
+      'Peças Utilizadas':h.pecas||'',
+      'Técnico':h.tec||'',
+      'Status':statusMap[h.status]||h.status||'',
+      'Finalizado':h.finalizado?'Sim':'Não',
+    }));
+    const ws=XLSX.utils.json_to_sheet(rows);
+    ws['!cols']=[{wch:20},{wch:12},{wch:12},{wch:18},{wch:18},{wch:12},{wch:40},{wch:30},{wch:40},{wch:30},{wch:20},{wch:16},{wch:12}];
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,'Histórico',ws);
+    const now=new Date();
+    const nomeSafe=m.nome.replace(/[^a-zA-Z0-9]/g,'_').slice(0,20);
+    const fname=`MaintPRO_${nomeSafe}_${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}.xlsx`;
+    XLSX.writeFile(wb,fname);
+    hideLoading();
+  }catch(e){hideLoading();alert('Erro ao gerar Excel: '+e.message);console.error(e);}
+}
 // ── quais roles podem aprovar novos usuários ──
 const ROLES_APROVADORES = ['Gestor','Sênior','Técnico','Supervisor','Engenheiro'];
 function podePendente(role){ return ROLES_APROVADORES.includes(role); }
